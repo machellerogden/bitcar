@@ -75,7 +75,7 @@ function getOwnRepos(config) {
 
 function getReposFromUsernames(config) {
     return Promise.map(config.usernames, (username) => {
-        let reqUrl = `https://api.github.com/users/${username}/repos`;
+        let reqUrl = `https://api.github.com/users/${username}/repos?access_token=${config.accessToken}&page=1`;
         function getPage(sources, url) {
             return axios.get(url).then((res) => {
                 const all = sources.concat(_.map(res.data, (item) => {
