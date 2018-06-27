@@ -42,7 +42,7 @@ function router(options) {
         return getSourceData(true);
     } else {
         const sourceDataPromise = getSourceData();
-        const pathsPromise = sourceDataPromise.then(getPaths).filter((v) => (new RegExp(searchTerm)).test(v));
+        const pathsPromise = sourceDataPromise.then(getPaths).filter((v) => (new RegExp(searchTerm, 'i')).test(v));
         if (options.completions) {
             return pathsPromise.map((result) => _.tail(result.split(path.sep)).join(path.sep))
                 .each(_.ary(output.log, 1));
