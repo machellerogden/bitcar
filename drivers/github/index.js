@@ -13,16 +13,19 @@ module.exports = {
 
 function createRepo(options) {
     let githubConfig = _.find(config.get().drivers, { type: 'github' });
+    let authHeaders = {};
+    if (config.accessToken)
+        authHeaders = {
+            headers: {
+                'Authorization': 'token ' + githubConfig.accessToken
+            }
+        };
     const url = `https://api.github.com/user/repos`;
     return axios.post(url, {
         name: options.name,
         description: "created by bitcar",
         private: options.private || false
-    }, {
-        headers: {
-            'Authorization': 'token ' + githubConfig.accessToken
-        }
-    });
+    }, authHeaders);
 }
 
 function getConfiguredRepos(config) {
@@ -56,11 +59,13 @@ function parseLinkHeader(header) {
 
 function getOwnRepos(config) {
     let reqUrl = `https://api.github.com/user/repos?&page=1`;
-    let authHeaders = {
-        headers: {
-            'Authorization': 'token ' + config.accessToken
-        }
-    };
+    let authHeaders = {};
+    if (config.accessToken)
+        authHeaders = {
+            headers: {
+                'Authorization': 'token ' + config.accessToken
+            }
+        };
 
     function getPage(sources, url, authConfig) {
         return axios.get(url, authConfig).then((res) => {
@@ -87,11 +92,13 @@ function getOwnRepos(config) {
 function getReposFromUsernames(config) {
     return Promise.map(config.usernames, (username) => {
         let reqUrl = `https://api.github.com/users/${username}/repos?page=1`;
-        let authHeaders = {
-            headers: {
-                'Authorization': 'token ' + config.accessToken
-            }
-        };
+        let authHeaders = {};
+        if (config.accessToken)
+            authHeaders = {
+                headers: {
+                    'Authorization': 'token ' + config.accessToken
+                }
+            };
 
         function getPage(sources, url, authConfig) {
             return axios.get(url, authConfig).then((res) => {
