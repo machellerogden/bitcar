@@ -4,7 +4,7 @@ const axios = require('axios');
 const Promise = require('bluebird');
 const config = require('../../lib/config');
 
-module.exports =  {
+module.exports = {
     createRepo,
     getConfiguredRepos,
     getOwnRepos,
@@ -13,12 +13,19 @@ module.exports =  {
 
 function createRepo(options) {
     let githubConfig = _.find(config.get().drivers, { type: 'github' });
-    const url = `https://api.github.com/user/repos?access_token=${githubConfig.accessToken}`;
+    let authHeaders = {};
+    if (config.accessToken)
+        authHeaders = {
+            headers: {
+                'Authorization': 'token ' + githubConfig.accessToken
+            }
+        };
+    const url = `https://api.github.com/user/repos`;
     return axios.post(url, {
         name: options.name,
         description: "created by bitcar",
         private: options.private || false
-    });
+    }, authHeaders);
 }
 
 function getConfiguredRepos(config) {
@@ -51,9 +58,17 @@ function parseLinkHeader(header) {
 }
 
 function getOwnRepos(config) {
-    let reqUrl = `https://api.github.com/user/repos?access_token=${config.accessToken}&page=1`;
-    function getPage(sources, url) {
-        return axios.get(url).then((res) => {
+    let reqUrl = `https://api.github.com/user/repos?&page=1`;
+    let authHeaders = {};
+    if (config.accessToken)
+        authHeaders = {
+            headers: {
+                'Authorization': 'token ' + config.accessToken
+            }
+        };
+
+    function getPage(sources, url, authConfig) {
+        return axios.get(url, authConfig).then((res) => {
             const all = sources.concat(_.map(res.data, (item) => {
                 const result = {};
                 result.name = item.full_name;
@@ -64,20 +79,29 @@ function getOwnRepos(config) {
             if (res.headers.link) {
                 let linkHeader = parseLinkHeader(res.headers.link);
                 if (linkHeader.next) {
-                    return getPage(all, linkHeader.next);
+                    return getPage(all, linkHeader.next, authConfig);
                 }
             }
             return all;
         }).catch();
     }
-    return getPage([], reqUrl);
+
+    return getPage([], reqUrl, authHeaders);
 }
 
 function getReposFromUsernames(config) {
     return Promise.map(config.usernames, (username) => {
-        let reqUrl = `https://api.github.com/users/${username}/repos?access_token=${config.accessToken}&page=1`;
-        function getPage(sources, url) {
-            return axios.get(url).then((res) => {
+        let reqUrl = `https://api.github.com/users/${username}/repos?page=1`;
+        let authHeaders = {};
+        if (config.accessToken)
+            authHeaders = {
+                headers: {
+                    'Authorization': 'token ' + config.accessToken
+                }
+            };
+
+        function getPage(sources, url, authConfig) {
+            return axios.get(url, authConfig).then((res) => {
                 const all = sources.concat(_.map(res.data, (item) => {
                     const result = {};
                     result.name = item.full_name;
@@ -94,7 +118,8 @@ function getReposFromUsernames(config) {
                 return all;
             });
         }
-        return getPage([], reqUrl);
+
+        return getPage([], reqUrl, authHeaders);
     }).reduce((sources, result) => {
         sources = sources.concat(result);
         return sources;
