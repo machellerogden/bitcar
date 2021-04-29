@@ -19,7 +19,7 @@ function getConfiguredRepos(config) {
                 ...acc,
                 ...res.data.map(v => ({
                     name: v.path_with_namespace,
-                    clone: v.http_url_to_repo,
+                    clone: v.ssh_url_to_repo,
                     html: v._links.self
                 }))
             ]), []);
