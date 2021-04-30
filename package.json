@@ -17,7 +17,7 @@
     "changelog": "./node_modules/.bin/github-changes -o machellerogden -r bitcar",
     "generate-and-stage-changelog": "npm run changelog && git add -A",
     "coverage": "rm -rf coverage && node node_modules/.bin/istanbul --include-all-sources cover -x \"test/**/*.spec.js\" --dir=\"coverage\" --root=\"./\" node_modules/.bin/_mocha -- \"test/**/*.spec.js\"",
-    "check-coverage": "npm run coverage && ./node_modules/.bin/istanbul check-coverage --root=\"./coverage\" --statement 60 --function 60 --branch 50"
+    "check-coverage": "npm run coverage && ./node_modules/.bin/istanbul check-coverage --root=\"./coverage\" --statement 60 --function 60 --branch 40"
   },
   "contributors": [
     {

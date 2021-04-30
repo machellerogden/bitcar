@@ -35,6 +35,10 @@ function setup() {
                 {
                     name: 'Bitbucket Server',
                     value: 'bitbucket-server'
+                },
+                {
+                    name: 'Gitlab',
+                    value: 'gitlab'
                 }
             ]
 
@@ -82,6 +86,25 @@ function setup() {
             when: (answers) => answers.drivers.indexOf('bitbucket-server') >= 0
         },
         {
+            type: 'confirm',
+            name: 'addGitlabPrivateToken',
+            message: 'Do you want to access your private repos on gitlab?',
+            default: true,
+            when: (answers) => answers.drivers.indexOf('gitlab') >= 0
+        },
+        {
+            type: 'input',
+            name: 'gitlabPrivateToken',
+            message: 'Please enter your gitlab.com private token (generate one at https://gitlab.com/-/profile/personal_access_tokens):',
+            when: (answers) => answers.addGitlabPrivateToken
+        },
+        {
+            type: 'input',
+            name: 'gitlabGroups',
+            message: 'Please type the gitlab group ids which you want bitcar to track (comma separated, no spaces):',
+            when: (answers) => answers.drivers.indexOf('gitlab') >= 0
+        },
+        {
             type: 'input',
             name: 'editorCmd',
             message: 'Please enter the terminal command you\'d like to use for viewing/edit files:',
@@ -116,6 +139,14 @@ source $HOME/.bitcar/completions.sh
 
             if (answers.drivers.indexOf('bitbucket-server') >= 0) {
                 configContent.drivers.push({ type: 'bitbucket-server', host: answers.bitbucketServerHost });
+            }
+
+            if (answers.drivers.indexOf('gitlab') >= 0) {
+                let gitlabConfig = { type: 'gitlab', host: 'gitlab.com', privateToken: answers.gitlabPrivateToken };
+                if (answers.gitlabGroups) {
+                    gitlabConfig.groups = answers.gitlabGroups.split(',');
+                }
+                configContent.drivers.push(gitlabConfig);
             }
 
             const mkdirp = require('mkdirp');
