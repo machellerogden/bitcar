@@ -13,7 +13,7 @@ function getConfiguredRepos(config) {
         const { privateToken, groups } = gitlabConfig;
         return Promise.reduce(groups, (acc, groupId) =>
             axios.request({
-                url: `https://gitlab.com/api/v4/groups/${groupId}/projects`,
+                url: `https://gitlab.com/api/v4/groups/${groupId}/projects?per_page=100`, // TODO: use x-next-page and x-total-pages headers to walk results
                 headers: { 'PRIVATE-TOKEN': privateToken }
             }).then((res) => [
                 ...acc,
