@@ -1,6 +1,6 @@
 {
   "name": "bitcar",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "description": "Seamlessly jump between repos from the command line.",
   "repository": {
     "type": "git",
@@ -56,7 +56,6 @@
   },
   "pre-commit": [
     "lint",
-    "test",
-    "check-coverage"
+    "test"
   ]
 }
