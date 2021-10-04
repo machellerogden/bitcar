@@ -236,10 +236,12 @@ describe('the bitcar router', () => {
         });
         it('should call each configured driver', () => {
             sandbox.stub(drivers['bitbucket-server'], 'getConfiguredRepos', () => Promise.resolve([]));
+            sandbox.stub(drivers['gitlab'], 'getConfiguredRepos', () => Promise.resolve([]));
             sandbox.stub(drivers.github, 'getConfiguredRepos', () => Promise.resolve([]));
             return router({ _: [ ], refresh: true })
                 .then(() => {
                     expect(drivers['bitbucket-server'].getConfiguredRepos).to.have.been.called;
+                    expect(drivers['gitlab'].getConfiguredRepos).to.have.been.called;
                     expect(drivers.github.getConfiguredRepos).to.have.been.called;
                 })
                 .catch(()=> { });
