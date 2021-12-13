@@ -73,6 +73,7 @@ function getOwnRepos(config) {
                 const result = {};
                 result.name = item.full_name;
                 result.clone = (config.cloneUrl === 'ssh') ? item.ssh_url : item.clone_url;
+                result.default_branch = item.default_branch;
                 result.html = item.html_url;
                 return result;
             }));
@@ -106,6 +107,7 @@ function getReposFromUsernames(config) {
                     const result = {};
                     result.name = item.full_name;
                     result.clone = (config.cloneUrl === 'ssh') ? item.ssh_url : item.clone_url;
+                    result.default_branch = item.default_branch;
                     result.html = item.html_url;
                     return result;
                 }));

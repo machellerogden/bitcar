@@ -55,7 +55,7 @@ describe('the bitcar router', () => {
         it('should console log version and exit 0', () => {
             sandbox.stub(output, 'log');
             return router({ _: [ ], version: true }).then(() => {
-                expect(output.log).to.have.been.calledWithMatch(sinon.match(/\d\.\d\.\d/));
+                expect(output.log).to.have.been.calledWithMatch(sinon.match(/\d+\.\d+\.\d+/));
             });
         });
     });

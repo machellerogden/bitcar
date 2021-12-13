@@ -22,6 +22,7 @@ async function getProjects(groupId, privateToken, page = 1) {
             ...data.map(v => ({
                 name: v.path_with_namespace,
                 clone: v.ssh_url_to_repo,
+                default_branch: v.default_branch,
                 html: v.web_url
             }))
         ];
