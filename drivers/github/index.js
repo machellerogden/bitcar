@@ -17,7 +17,7 @@ function createRepo(options) {
     if (config.accessToken)
         authHeaders = {
             headers: {
-                'Authorization': 'token ' + githubConfig.accessToken
+                'Authorization': 'Bearer ' + githubConfig.accessToken
             }
         };
     const url = `https://api.github.com/user/repos`;
@@ -63,7 +63,7 @@ function getOwnRepos(config) {
     if (config.accessToken)
         authHeaders = {
             headers: {
-                'Authorization': 'token ' + config.accessToken
+                'Authorization': 'Bearer ' + config.accessToken
             }
         };
 
@@ -97,7 +97,7 @@ function getReposFromUsernames(config) {
         if (config.accessToken)
             authHeaders = {
                 headers: {
-                    'Authorization': 'token ' + config.accessToken
+                    'Authorization': 'Bearer ' + config.accessToken
                 }
             };
 
