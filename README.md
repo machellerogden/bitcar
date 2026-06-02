@@ -1,20 +1,20 @@
-# ![bitcar](https://raw.githubusercontent.com/carsdotcom/bitcar/master/resources/bitcar.png)
+# ![bitcar](https://raw.githubusercontent.com/machellerogden/bitcar/master/resources/bitcar.png)
 
 [![NPM version](https://img.shields.io/npm/v/bitcar.svg)]()
 [![npm](https://img.shields.io/npm/dt/bitcar.svg)]()
-[![Travis](https://img.shields.io/travis/carsdotcom/bitcar.svg)]()
+[![CI](https://github.com/machellerogden/bitcar/actions/workflows/ci.yml/badge.svg)](https://github.com/machellerogden/bitcar/actions/workflows/ci.yml)
 [![Apache 2.0](https://img.shields.io/badge/license-apache--2.0-lightgrey.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![GitHub stars](https://img.shields.io/github/stars/carsdotcom/bitcar.svg?style=social&label=Star)](https://github.com/carsdotcom/bitcar)
+[![GitHub stars](https://img.shields.io/github/stars/machellerogden/bitcar.svg?style=social&label=Star)](https://github.com/machellerogden/bitcar)
 
-> Seemlessly jump between repos from the command line.
+> Seamlessly jump between repos from the command line.
 
 ----
 
-![bitcar in action](https://raw.githubusercontent.com/carsdotcom/bitcar/master/bitcar-google-demo.gif)
+![bitcar in action](https://raw.githubusercontent.com/machellerogden/bitcar/master/bitcar-google-demo.gif)
 
 ## Requirements
 
-   *  node 6.x.x or newer
+   *  node 22.x.x or newer
    *  either bash 3+, or zsh 5+
 
 Older versions of zsh may work, but are untested.
@@ -126,6 +126,14 @@ Currently this only works for GitHub. Please note you must include the domain in
 
 This feature will remain experimental until more options are added. For the time being, it will create a public repo on your github account. After creating the repo you will need to run a cache refresh in order for bitcar to find the new repo.
 
+
+## Supported services
+
+bitcar actively supports **GitHub** and **GitLab**.
+
+> **Note:** The **Bitbucket Server** driver is **deprecated and untested**. It is
+> retained for backwards compatibility only and receives no active maintenance.
+> Use at your own risk.
 
 ## License
 

@@ -1,314 +1,195 @@
-'use strict';
-const chai = require('chai');
-const expect = chai.expect;
-const sinon = require('sinon');
-const sinonChai = require('sinon-chai');
-chai.use(sinonChai);
-const chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import path from 'node:path';
+import nodeFs from 'node:fs';
 
-const router = require('../router');
-const fs = require('../lib/fs');
-const inquirer = require('inquirer');
-const path = require('path');
-const gitFactory = require('../lib/gitFactory');
-const browser = require('../lib/browser');
-const output = require('../lib/output');
-const config = require('../lib/config');
-const drivers = require('../drivers');
-const axios = require('axios');
+import router from '../router.js';
+import config from '../lib/config.js';
+import drivers from '../drivers/index.js';
+import http from '../lib/http.js';
+import prompt from '../lib/prompt.js';
+import browser from '../lib/browser.js';
+import gitFactory from '../lib/gitFactory.js';
+import output from '../lib/output.js';
 
-// store cache fixture in mem-fs
-const CACHE_PATH = path.normalize(process.env.HOME + '/.bitcar/cache.json');
-fs.writeJSON(CACHE_PATH, require('./fixtures/cache.json'), null, 4);
+const FIXTURE = path.join(path.dirname(new URL(import.meta.url).pathname), 'fixtures', 'cache.json');
+const CACHE_PATH = path.join(process.env.HOME, '.bitcar', 'cache.json');
 
-const schemas = require('./schemas');
-const mocks = require('./mocks');
-
+const configWithGithub = {
+    drivers: [{ type: 'github', host: 'github.com', accessToken: 'token' }]
+};
+const configWithUsernames = {
+    drivers: [{ type: 'github', host: 'github.com', accessToken: 'token', usernames: ['google'] }]
+};
+const configWithoutGithub = {
+    drivers: [{ type: 'bitbucket-server', host: 'git.example.com' }]
+};
+const configGithubAndBitbucket = {
+    drivers: [
+        { type: 'github', host: 'github.com', accessToken: 'token' },
+        { type: 'bitbucket-server', host: 'git.example.com' }
+    ]
+};
+const configAllThree = {
+    drivers: [
+        { type: 'github', host: 'github.com', accessToken: 'token' },
+        { type: 'bitbucket-server', host: 'git.example.com' },
+        { type: 'gitlab', host: 'gitlab.com', privateToken: 'token', groups: ['1'] }
+    ]
+};
 
 describe('the bitcar router', () => {
-    let sandbox;
-
     beforeEach(() => {
-        sandbox = sinon.sandbox.create();
-        sandbox.stub(gitFactory, 'getInstance', () => {
-            return mocks.git;
+        // restore cache fixture before each test (refresh tests overwrite it)
+        nodeFs.copyFileSync(FIXTURE, CACHE_PATH);
+        vi.spyOn(output, 'log').mockImplementation(() => {});
+        vi.spyOn(output, 'error').mockImplementation(() => {});
+        vi.spyOn(browser, 'open').mockResolvedValue(undefined);
+        vi.spyOn(gitFactory, 'getInstance').mockReturnValue({
+            clone: vi.fn().mockResolvedValue(undefined)
         });
-        sandbox.stub(browser, 'open', mocks.open);
-        sandbox.stub(fs, 'commit', (cb) => cb());
-        sandbox.stub(inquirer, 'prompt', (options) => {
-            const setupPromptValidation = schemas.setupPrompt.validate(options);
-            if (!setupPromptValidation.error) return Promise.resolve(mocks.setupAnswers);
-            const resultsPromptValidation = schemas.resultsPrompt.validate(options);
-            if (!resultsPromptValidation.error) return Promise.resolve(mocks.resultAnswers);
-            const credentialsPromptValidation = schemas.credentialsPrompt.validate(options);
-            if (!credentialsPromptValidation.error) return Promise.resolve(mocks.credentialsAnswers);
-            return Promise.reject();
-        });
+        vi.spyOn(prompt, 'input').mockResolvedValue('foo');
+        vi.spyOn(prompt, 'password').mockResolvedValue('bar');
+        vi.spyOn(prompt, 'select').mockImplementation(({ choices }) => Promise.resolve(choices[0].value));
+        vi.spyOn(prompt, 'confirm').mockResolvedValue(true);
+        vi.spyOn(http, 'get').mockResolvedValue({ status: 200, data: [], headers: new Headers() });
+        vi.spyOn(http, 'request').mockResolvedValue({ status: 200, data: { values: [] }, headers: new Headers() });
+        vi.spyOn(http, 'post').mockResolvedValue({ status: 201, data: {} });
     });
 
-    afterEach(function () {
-        sandbox.restore();
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     describe('when called with version option', () => {
-        it('should console log version and exit 0', () => {
-            sandbox.stub(output, 'log');
-            return router({ _: [ ], version: true }).then(() => {
-                expect(output.log).to.have.been.calledWithMatch(sinon.match(/\d+\.\d+\.\d+/));
-            });
+        it('logs a semver version', async () => {
+            await router({ _: [], version: true });
+            expect(output.log).toHaveBeenCalledWith(expect.stringMatching(/\d+\.\d+\.\d+/));
         });
     });
+
     describe('when called with search term', () => {
-        describe('with no other options', () => {
-            describe('for existing entry', () => {
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ 'bitcar' ] })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-                it('should find existing entry for the search term in the cache - chassisjs', () => {
-                    return router({ _: [ 'chassisjs' ] })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-            });
-            describe('for non-existant entry', () => {
-                it('should reject with "No results." for non-existant entry for the search term in the cache - doesnotexist', () => {
-                    return expect(router({ _: [ 'doesnotexist' ] })).to.eventually.be.rejectedWith('No results.');
-                });
-            });
+        it('resolves a source result for an existing entry', async () => {
+            const result = await router({ _: ['bitcar'] });
+            expect(result).toMatchObject({ name: 'machellerogden/bitcar' });
+            expect(result.repoDir).toContain('github.com');
+        });
+
+        it('resolves for another existing entry - dotfiles', async () => {
+            const result = await router({ _: ['dotfiles'] });
+            expect(result).toMatchObject({ name: 'machellerogden/dotfiles' });
+        });
+
+        it('rejects with "No results." for a missing entry', async () => {
+            await expect(router({ _: ['doesnotexist'] })).rejects.toThrow('No results.');
+        });
+
+        it('treats regex metacharacters in the term literally', async () => {
+            await expect(router({ _: ['bit+car'] })).rejects.toThrow('No results.');
         });
     });
+
     describe('open option', () => {
-        describe('with a search term', () => {
-            describe('for existing entry', () => {
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], open: 'bitcar' })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-                it('should open a browser corresponding for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], open: 'bitcar' })
-                        .then((result) => {
-                            expect(browser.open).to.have.been.calledWith('https://github.com/carsdotcom/bitcar');
-                        });
-                });
-                it('regardless of order, should open a browser corresponding for the search term in the cache - bitcar', () => {
-                    return router({ _: [ 'bitcar' ], open: true })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-                it('regardless of order, should open a browser corresponding for the search term in the cache - bitcar', () => {
-                    return router({ _: [ 'bitcar' ], open: true })
-                        .then((result) => {
-                            expect(browser.open).to.have.been.calledWith('https://github.com/carsdotcom/bitcar');
-                        });
-                });
-            });
-            describe('for non-existant entry', () => {
-                it('should exit non-zero with a message of "No results."', () => {
-                    return expect(router({ _: [ 'doesnotexist' ] })).to.eventually.be.rejectedWith('No results.');
-                });
-            });
+        it('opens the browser for the matched repo', async () => {
+            await router({ _: [], open: 'bitcar' });
+            expect(browser.open).toHaveBeenCalledWith('https://github.com/machellerogden/bitcar');
         });
+
+        it('works regardless of argument order', async () => {
+            await router({ _: ['bitcar'], open: true });
+            expect(browser.open).toHaveBeenCalledWith('https://github.com/machellerogden/bitcar');
+        });
+
         describe('without a search term', () => {
-            describe('when current working directory corresponds to an entry in the cache', () => {
-                beforeEach(() => {
-                        sandbox.stub(process, 'cwd', () => '/Users/macheller-ogden/repos/github.com/carsdotcom/bitcar');
-                });
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], open: true })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-                it('should open a browser corresponding to the current directory - bitcar', () => {
-                    return router({ _: [ ], open: true })
-                        .then((result) => {
-                            expect(browser.open).to.have.been.calledWith('https://github.com/carsdotcom/bitcar');
-                        });
-                });
-            });
-            describe('when current working directory does not correspond to an entry in the cache', () => {
-                it('should exit non-zero with a message of "No results."', () => {
-                    return router({ _: [ ], open: true })
-                        .then((result) => {
-                            expect(browser.open).to.have.been.calledWith('https://github.com/carsdotcom/bitcar');
-                        })
-                        .catch((err)=> {
-                            expect(err.message).to.contain('No results');
-                        });
-                });
+            it('falls back to the current working directory', async () => {
+                vi.spyOn(process, 'cwd').mockReturnValue('/Users/me/repos/github.com/machellerogden/bitcar');
+                const result = await router({ _: [], open: true });
+                expect(result).toMatchObject({ name: 'machellerogden/bitcar' });
+                expect(browser.open).toHaveBeenCalledWith('https://github.com/machellerogden/bitcar');
             });
         });
     });
+
     describe('edit option', () => {
-        describe('with a search term', () => {
-            describe('for existing entry', () => {
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], edit: 'bitcar' })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-                it('regardless of order, find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ 'bitcar' ], edit: true })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-            });
-            describe('for non-existant entry', () => {
-                it('should exit non-zero with a message of "No results."', () => {
-                    return expect(router({ _: [ 'doesnotexist' ], edit: true })).to.eventually.be.rejectedWith('No results.');
-                });
-            });
+        it('resolves a source result for an existing entry', async () => {
+            const result = await router({ _: [], edit: 'bitcar' });
+            expect(result).toMatchObject({ name: 'machellerogden/bitcar' });
         });
-        describe('without a search term', () => {
-            describe('when current working directory corresponds to an entry in the cache', () => {
-                beforeEach(() => {
-                        sandbox.stub(process, 'cwd', () => '/Users/macheller-ogden/repos/github.com/carsdotcom/bitcar');
-                });
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], edit: true })
-                        .then((result) => {
-                            const resultValidation = schemas.result.validate(result);
-                            expect(resultValidation.error).to.be.a('null');
-                        });
-                });
-            });
+
+        it('rejects with "No results." for a missing entry', async () => {
+            await expect(router({ _: ['doesnotexist'], edit: true })).rejects.toThrow('No results.');
         });
     });
+
     describe('completions option', () => {
-        beforeEach(() => {
-            sandbox.stub(output, 'log');
+        it('logs completion candidates for an existing entry', async () => {
+            await router({ _: [], completions: 'bitcar' });
+            expect(output.log).toHaveBeenCalledWith('machellerogden/bitcar');
         });
-        describe('with a search term', () => {
-            describe('for existing entry', () => {
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], completions: 'bitcar' })
-                        .then((results) => {
-                            const resultsValidation = schemas.results.validate(results);
-                            expect(resultsValidation.error).to.be.a('null');
-                        });
-                });
-                it('regardless of order, find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ 'bitcar' ], completions: true })
-                        .then((results) => {
-                            const resultsValidation = schemas.results.validate(results);
-                            expect(resultsValidation.error).to.be.a('null');
-                        });
-                });
-            });
-            describe('for non-existant entry', () => {
-                it('should exit non-zero with a message of "No results."', () => {
-                    return expect(router({ _: [ 'doesnotexist' ], completions: true })).to.eventually.eql([]);
-                });
-            });
-        });
-        describe('without a search term', () => {
-            describe('when current working directory corresponds to an entry in the cache', () => {
-                it('should find existing entry for the search term in the cache - bitcar', () => {
-                    return router({ _: [ ], completions: true })
-                        .then((results) => {
-                            const resultsValidation = schemas.results.validate(results);
-                            expect(resultsValidation.error).to.be.a('null');
-                        });
-                });
-            });
+
+        it('returns an empty list for a missing entry', async () => {
+            const results = await router({ _: ['doesnotexist'], completions: true });
+            expect(results).toBeUndefined();
+            expect(output.log).not.toHaveBeenCalledWith(expect.stringContaining('doesnotexist'));
         });
     });
+
     describe('refresh option', () => {
-        beforeEach(() => {
-            sandbox.stub(output, 'log');
-        });
-        it('should call each configured driver', () => {
-            sandbox.stub(drivers['bitbucket-server'], 'getConfiguredRepos', () => Promise.resolve([]));
-            sandbox.stub(drivers['gitlab'], 'getConfiguredRepos', () => Promise.resolve([]));
-            sandbox.stub(drivers.github, 'getConfiguredRepos', () => Promise.resolve([]));
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(drivers['bitbucket-server'].getConfiguredRepos).to.have.been.called;
-                    expect(drivers['gitlab'].getConfiguredRepos).to.have.been.called;
-                    expect(drivers.github.getConfiguredRepos).to.have.been.called;
-                })
-                .catch(()=> { });
+        it('calls each configured driver', async () => {
+            vi.spyOn(config, 'get').mockReturnValue(configAllThree);
+            const bb = vi.spyOn(drivers['bitbucket-server'], 'getConfiguredRepos').mockResolvedValue([]);
+            const gl = vi.spyOn(drivers['gitlab'], 'getConfiguredRepos').mockResolvedValue([]);
+            const gh = vi.spyOn(drivers['github'], 'getConfiguredRepos').mockResolvedValue([]);
+            await router({ _: [], refresh: true });
+            expect(bb).toHaveBeenCalled();
+            expect(gl).toHaveBeenCalled();
+            expect(gh).toHaveBeenCalled();
         });
     });
+
     describe('create option', () => {
-        beforeEach(() => {
-            sandbox.stub(output, 'log');
+        it('calls createRepo on the github driver for a github.com name', async () => {
+            const create = vi.spyOn(drivers.github, 'createRepo').mockResolvedValue({});
+            await router({ _: [], create: 'github.com/foo/bar' });
+            expect(create).toHaveBeenCalled();
+            expect(create.mock.calls[0][1]).toMatchObject({ name: 'bar' });
         });
-        describe('when the given repo name starts with github.com', () => {
-            it('should call the createRepo method on the github driver', () => {
-                sandbox.stub(drivers.github, 'createRepo', () => Promise.resolve([]));
-                return router({ _: [ ], create: 'github.com/foo/bar' })
-                    .then(() => {
-                        expect(drivers.github.createRepo).to.have.been.called;
-                    });
-            });
+
+        it('rejects for a non-github name', async () => {
+            await expect(router({ _: [], create: 'gitlab.com/foo/bar' })).rejects.toThrow('github.com');
         });
     });
+
     describe('bitbucket-server driver', () => {
-        beforeEach(() => {
-            sandbox.stub(output, 'log');
-            sandbox.stub(axios, 'request', () => Promise.resolve(mocks.bitbucketServerResponse));
-            sandbox.stub(drivers.github, 'getConfiguredRepos', () => Promise.resolve([]));
+        it('makes http requests when configured', async () => {
+            vi.spyOn(config, 'get').mockReturnValue(configGithubAndBitbucket);
+            await router({ _: [], refresh: true });
+            expect(http.request).toHaveBeenCalled();
         });
-        it('should call axios request', () => {
-            sandbox.stub(config, 'get', () => mocks.config);
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(axios.request).to.have.been.called;
-                });
-        });
-        it('shouldn\'t make any requests if there is no config', () => {
-            sandbox.stub(config, 'get', () => mocks.configWithoutBitbucketServer);
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(axios.request).not.to.have.been.called;
-                });
+
+        it('makes no requests when not configured', async () => {
+            vi.spyOn(config, 'get').mockReturnValue({ drivers: [] });
+            await router({ _: [], refresh: true });
+            expect(http.request).not.toHaveBeenCalled();
         });
     });
+
     describe('github driver', () => {
-        beforeEach(() => {
-            sandbox.stub(output, 'log');
-            sandbox.stub(axios, 'get', () => Promise.resolve(mocks.githubResponse));
-            sandbox.stub(drivers['bitbucket-server'], 'getConfiguredRepos', () => Promise.resolve([]));
+        it('makes http requests when configured', async () => {
+            vi.spyOn(config, 'get').mockReturnValue(configWithGithub);
+            await router({ _: [], refresh: true });
+            expect(http.get).toHaveBeenCalled();
         });
-        it('should call axios request', () => {
-            sandbox.stub(config, 'get', () => mocks.config);
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(axios.get).to.have.been.called;
-                });
+
+        it('makes requests for usernames given in config', async () => {
+            vi.spyOn(config, 'get').mockReturnValue(configWithUsernames);
+            await router({ _: [], refresh: true });
+            expect(http.get).toHaveBeenCalled();
         });
-        it('should make requests for any usernames given in config', () => {
-            sandbox.stub(config, 'get', () => mocks.configWithUsernames);
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(axios.get).to.have.been.called;
-                });
-        });
-        it('shouldn\'t make any requests if there is no config', () => {
-            sandbox.stub(config, 'get', () => mocks.configWithoutGithub);
-            return router({ _: [ ], refresh: true })
-                .then(() => {
-                    expect(axios.get).not.to.have.been.called;
-                });
+
+        it('makes no requests when github is not configured', async () => {
+            vi.spyOn(config, 'get').mockReturnValue(configWithoutGithub);
+            await router({ _: [], refresh: true });
+            expect(http.get).not.toHaveBeenCalled();
         });
     });
 });
-

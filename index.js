@@ -1,10 +1,7 @@
 #!/usr/bin/env node
-/* istanbul ignore next */
-(function() {
-
-const router = require('./router');
-const argv = require('./argv');
-const setTarget = require('./lib/setTarget');
+import router from './router.js';
+import argv from './argv.js';
+import setTarget from './lib/setTarget.js';
 
 router(argv)
     .then(setTarget)
@@ -12,5 +9,3 @@ router(argv)
         console.log(err.message || err);
         process.exit(1);
     });
-
-}());

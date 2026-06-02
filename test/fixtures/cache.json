@@ -1,16 +1,16 @@
 {
-    "git.cars.com": [
+    "git.example.com": [
         {
-            "name": "npm/chassisjs",
-            "clone": "https://mhellerogden@git.cars.com/scm/npm/chassisjs.git",
-            "html": "https://git.cars.com/projects/NPM/repos/chassisjs/browse"
+            "name": "acme/toolkit",
+            "clone": "https://user@git.example.com/scm/acme/toolkit.git",
+            "html": "https://git.example.com/projects/ACME/repos/toolkit/browse"
         }
     ],
     "github.com": [
         {
-            "name": "carsdotcom/bitcar",
-            "clone": "https://github.com/carsdotcom/bitcar.git",
-            "html": "https://github.com/carsdotcom/bitcar"
+            "name": "machellerogden/bitcar",
+            "clone": "https://github.com/machellerogden/bitcar.git",
+            "html": "https://github.com/machellerogden/bitcar"
         },
         {
             "name": "machellerogden/dotfiles",

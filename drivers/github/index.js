@@ -1,31 +1,33 @@
-'use strict';
-const _ = require('lodash');
-const axios = require('axios');
-const Promise = require('bluebird');
-const config = require('../../lib/config');
+import _ from 'lodash';
+import http from '../../lib/http.js';
+import output from '../../lib/output.js';
 
-module.exports = {
+export default {
     createRepo,
     getConfiguredRepos,
     getOwnRepos,
     getReposFromUsernames
 };
 
-function createRepo(options) {
-    let githubConfig = _.find(config.get().drivers, { type: 'github' });
-    let authHeaders = {};
-    if (config.accessToken)
-        authHeaders = {
-            headers: {
-                'Authorization': 'Bearer ' + githubConfig.accessToken
-            }
-        };
+function defaultHeaders(githubConfig) {
+    const headers = {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'bitcar'
+    };
+    if (githubConfig && githubConfig.accessToken) {
+        headers.Authorization = 'Bearer ' + githubConfig.accessToken;
+    }
+    return headers;
+}
+
+function createRepo(githubConfig, options) {
     const url = `https://api.github.com/user/repos`;
-    return axios.post(url, {
+    return http.post(url, {
         name: options.name,
-        description: "created by bitcar",
+        description: 'created by bitcar',
         private: options.private || false
-    }, authHeaders);
+    }, { headers: defaultHeaders(githubConfig) });
 }
 
 function getConfiguredRepos(config) {
@@ -44,86 +46,57 @@ function getConfiguredRepos(config) {
 }
 
 function parseLinkHeader(header) {
-    if (header.length === 0) throw new Error("input must not be of zero length");
+    if (!header || header.length === 0) return {};
     const parts = header.split(',');
-    const links = _.reduce(parts, (acc, part) => {
+    return _.reduce(parts, (acc, part) => {
         const section = part.split(';');
-        if (section.length !== 2) throw new Error("section could not be split on ';'");
+        if (section.length !== 2) return acc;
         const url = section[0].replace(/<(.*)>/, '$1').trim();
         const name = section[1].replace(/rel="(.*)"/, '$1').trim();
         acc[name] = url;
         return acc;
     }, {});
-    return links;
 }
 
-function getOwnRepos(config) {
-    let reqUrl = `https://api.github.com/user/repos?&page=1`;
-    let authHeaders = {};
-    if (config.accessToken)
-        authHeaders = {
-            headers: {
-                'Authorization': 'Bearer ' + config.accessToken
-            }
-        };
+function mapRepo(githubConfig) {
+    return (item) => ({
+        name: item.full_name,
+        clone: githubConfig.cloneUrl === 'ssh' ? item.ssh_url : item.clone_url,
+        default_branch: item.default_branch,
+        html: item.html_url
+    });
+}
 
-    function getPage(sources, url, authConfig) {
-        return axios.get(url, authConfig).then((res) => {
-            const all = sources.concat(_.map(res.data, (item) => {
-                const result = {};
-                result.name = item.full_name;
-                result.clone = (config.cloneUrl === 'ssh') ? item.ssh_url : item.clone_url;
-                result.default_branch = item.default_branch;
-                result.html = item.html_url;
-                return result;
-            }));
-            if (res.headers.link) {
-                let linkHeader = parseLinkHeader(res.headers.link);
-                if (linkHeader.next) {
-                    return getPage(all, linkHeader.next, authConfig);
-                }
-            }
-            return all;
-        }).catch();
+async function getPage(url, headers, githubConfig, sources = []) {
+    const res = await http.get(url, { headers });
+    const all = sources.concat(_.map(res.data, mapRepo(githubConfig)));
+    const link = parseLinkHeader(res.headers.get('link'));
+    if (link.next) {
+        return getPage(link.next, headers, githubConfig, all);
     }
-
-    return getPage([], reqUrl, authHeaders);
+    return all;
 }
 
-function getReposFromUsernames(config) {
-    return Promise.map(config.usernames, (username) => {
-        let reqUrl = `https://api.github.com/users/${username}/repos?page=1`;
-        let authHeaders = {};
-        if (config.accessToken)
-            authHeaders = {
-                headers: {
-                    'Authorization': 'Bearer ' + config.accessToken
-                }
-            };
+async function getOwnRepos(githubConfig) {
+    const url = `https://api.github.com/user/repos?page=1&per_page=100`;
+    try {
+        return await getPage(url, defaultHeaders(githubConfig), githubConfig);
+    } catch (err) {
+        output.error(err.message || err);
+        return [];
+    }
+}
 
-        function getPage(sources, url, authConfig) {
-            return axios.get(url, authConfig).then((res) => {
-                const all = sources.concat(_.map(res.data, (item) => {
-                    const result = {};
-                    result.name = item.full_name;
-                    result.clone = (config.cloneUrl === 'ssh') ? item.ssh_url : item.clone_url;
-                    result.default_branch = item.default_branch;
-                    result.html = item.html_url;
-                    return result;
-                }));
-                if (res.headers.link) {
-                    let linkHeader = parseLinkHeader(res.headers.link);
-                    if (linkHeader.next) {
-                        return getPage(all, linkHeader.next);
-                    }
-                }
-                return all;
-            });
+async function getReposFromUsernames(githubConfig) {
+    const headers = defaultHeaders(githubConfig);
+    const results = await Promise.all(_.map(githubConfig.usernames, async (username) => {
+        const url = `https://api.github.com/users/${username}/repos?page=1&per_page=100`;
+        try {
+            return await getPage(url, headers, githubConfig);
+        } catch (err) {
+            output.error(err.message || err);
+            return [];
         }
-
-        return getPage([], reqUrl, authHeaders);
-    }).reduce((sources, result) => {
-        sources = sources.concat(result);
-        return sources;
-    }, []);
+    }));
+    return _.flatten(results);
 }

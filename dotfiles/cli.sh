@@ -29,4 +29,4 @@ function bitcar_cli {
 
 }
 
-alias bit=bitcar_cli
+alias <%= alias %>=bitcar_cli

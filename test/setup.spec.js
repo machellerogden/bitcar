@@ -1,82 +1,57 @@
-'use strict';
-const chai = require('chai');
-const expect = chai.expect;
-const sinon = require('sinon');
-const sinonChai = require('sinon-chai');
-chai.use(sinonChai);
-const chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import path from 'node:path';
+import _ from 'lodash';
 
-const setup = require('../setup');
-const fs = require('../lib/fs');
-const inquirer = require('inquirer');
-const path = require('path');
-const _ = require('lodash');
-const output = require('../lib/output');
+import setup from '../setup.js';
+import fs from '../lib/fs.js';
+import prompt from '../lib/prompt.js';
+import output from '../lib/output.js';
 
 const CONFIG_PATH = path.normalize(process.env.HOME + '/.bitcar/config');
 
-describe('the bitcar setup script', () => {
-    let sandbox;
-
-    beforeEach(() => {
-        sandbox = sinon.sandbox.create();
-        sandbox.stub(fs, 'commit', (cb) => cb());
-        sandbox.stub(output, 'log');
+function stubPrompts(driverChoices) {
+    vi.spyOn(output, 'log').mockImplementation(() => {});
+    vi.spyOn(prompt, 'checkbox').mockResolvedValue(driverChoices);
+    vi.spyOn(prompt, 'confirm').mockResolvedValue(false);
+    vi.spyOn(prompt, 'select').mockResolvedValue('ssh');
+    vi.spyOn(prompt, 'password').mockResolvedValue('secret');
+    vi.spyOn(prompt, 'input').mockImplementation(({ message }) => {
+        if (/bash command name/.test(message)) return Promise.resolve('bit');
+        if (/directory for the bitcar workspace/.test(message)) return Promise.resolve(path.join(process.env.HOME, 'ws'));
+        if (/Bitbucket Server domain/.test(message)) return Promise.resolve('git.example.com');
+        if (/viewing\/edit files/.test(message)) return Promise.resolve('vim');
+        return Promise.resolve('');
     });
+}
 
-    afterEach(function () {
-        sandbox.restore();
+describe('the bitcar setup script', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     describe('when only github is selected', () => {
-        beforeEach(() => {
-            sandbox.stub(inquirer, 'prompt', (options) => {
-                let answers = {
-                    alias: 'bitcar',
-                    workspaceDir: path.normalize('./.bitcar-test'),
-                    drivers: [ 'github' ],
-                    githubUsernames: 'carsdotcom'
-                };
-                return Promise.resolve(answers);
-            });
-        });
+        beforeEach(() => stubPrompts(['github']));
 
-        it('should add github to config', () => {
-            return setup().then(() => {
-                let config = fs.readJSON(CONFIG_PATH);
-                expect(config.drivers.length).to.equal(1);
-                let githubDriver = _.find(config.drivers, { type: 'github' });
-                expect(githubDriver).to.be.an('object');
-                expect(githubDriver.type).to.equal('github');
-                expect(githubDriver.host).to.equal('github.com');
-            });
+        it('adds github to config', async () => {
+            await setup();
+            const config = fs.readJSON(CONFIG_PATH);
+            expect(config.drivers.length).toBe(1);
+            const githubDriver = _.find(config.drivers, { type: 'github' });
+            expect(githubDriver).toBeTypeOf('object');
+            expect(githubDriver.host).toBe('github.com');
         });
     });
 
     describe('when only bitbucket server is selected', () => {
-        beforeEach(() => {
-            sandbox.stub(inquirer, 'prompt', (options) => {
-                let answers = {
-                    alias: 'bitcar',
-                    workspaceDir: path.normalize('./.bitcar-test'),
-                    drivers: [ 'bitbucket-server' ],
-                    bitbucketServerHost: 'git.cars.com'
-                };
-                return Promise.resolve(answers);
-            });
-        });
+        beforeEach(() => stubPrompts(['bitbucket-server']));
 
-        it('should add bitbucket server to config', () => {
-            return setup().then(() => {
-                let config = fs.readJSON(CONFIG_PATH);
-                expect(config.drivers.length).to.equal(1);
-                let githubDriver = _.find(config.drivers, { type: 'bitbucket-server' });
-                expect(githubDriver).to.be.an('object');
-                expect(githubDriver.type).to.equal('bitbucket-server');
-                expect(githubDriver.host).to.equal('git.cars.com');
-            });
+        it('adds bitbucket server to config', async () => {
+            await setup();
+            const config = fs.readJSON(CONFIG_PATH);
+            expect(config.drivers.length).toBe(1);
+            const driver = _.find(config.drivers, { type: 'bitbucket-server' });
+            expect(driver).toBeTypeOf('object');
+            expect(driver.host).toBe('git.example.com');
         });
     });
-
 });
